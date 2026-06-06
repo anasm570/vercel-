@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>📦 مستودع الملفات – Cloudinary</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', 'Cairo', sans-serif; }
+        body { background: linear-gradient(145deg, #0f172a, #1e293b); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { color: #ffdd99; font-size: clamp(1.8rem, 5vw, 2.5rem); }
+        .card { background: rgba(0,0,0,0.5); backdrop-filter: blur(10px); border-radius: 48px; padding: 25px; border: 1px solid #ffcc88; margin-bottom: 30px; }
+        .upload-area { border: 2px dashed #ffcc88; border-radius: 40px; padding: 30px; text-align: center; cursor: pointer; transition: 0.2s; }
+        .upload-area:hover { background: rgba(255,255,255,0.05); border-color: #f97316; }
+        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; margin-top: 15px; }
+        .file-card { background: #1e293b; border-radius: 28px; padding: 15px; border: 1px solid #334155; }
+        .file-name { font-weight: bold; color: #facc15; word-break: break-word; }
+        .file-url { font-size: 0.7rem; color: #88aacc; word-break: break-all; margin: 8px 0; }
+        .file-meta { font-size: 0.7rem; color: #94a3b8; }
+        .file-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+        .btn { padding: 8px 12px; border-radius: 40px; border: none; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+        .btn-download { background: #2c6e4b; color: white; }
+        .btn-copy { background: #2563eb; color: white; }
+        .btn-delete { background: #9e2a2a; color: white; }
+        .empty-msg { text-align: center; padding: 40px; color: #94a3b8; }
+        footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 0.7rem; }
+        .note { font-size: 0.7rem; color: #88aacc; margin-top: 10px; background: #1e293b; padding: 10px; border-radius: 20px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header"><h1>📦 مستودع الملفات (Cloudinary)</h1><p>رفع، نشر، تحميل – تخزين سحابي مجاني</p></div>
+    <div class="card">
+        <div id="uploadArea" class="upload-area"><div>📤 اسحب ملفاتك هنا أو اضغط للاختيار</div><input type="file" id="fileInput" multiple style="display:none;"></div>
+        <div class="note">🔒 الملفات تُخزن في Cloudinary (25 جيجابايت مجاني) – روابط عامة دائمة</div>
+    </div>
+    <div class="card"><h2 style="color:#ffdd99; margin-bottom:15px;">📂 الملفات المرفوعة</h2><div id="fileGrid" class="file-grid"><div class="empty-msg">جاري التحميل...</div></div></div>
+    <footer>⚡ يعمل على Vercel + Cloudinary – روابط مباشرة</footer>
+</div>
+<script>
+    let allFiles = [];
+
+    async function loadFiles() {
+        const res = await fetch('/api/files');
+        const files = await res.json();
+        allFiles = files;
+        const grid = document.getElementById('fileGrid');
+        if (!files.length) { grid.innerHTML = '<div class="empty-msg">📭 لا توجد ملفات. ارفع ملفاتك الأولى!</div>'; return; }
+        grid.innerHTML = '';
+        for (const file of files) {
+            const card = document.createElement('div'); card.className = 'file-card';
+            const sizeMB = (file.bytes / (1024*1024)).toFixed(2);
+            const sizeText = file.bytes > 1024*1024 ? sizeMB+' ميجابايت' : (file.bytes/1024).toFixed(0)+' كيلوبايت';
+            card.innerHTML = `
+                <div class="file-name">📄 ${escapeHtml(file.original_filename || file.public_id)}</div>
+                <div class="file-url">🔗 ${file.secure_url}</div>
+                <div class="file-meta">📦 ${sizeText} | 📅 ${new Date(file.created_at).toLocaleString('ar-EG')}</div>
+                <div class="file-actions">
+                    <button class="btn btn-download" data-url="${file.secure_url}">⬇️ تحميل</button>
+                    <button class="btn btn-copy" data-url="${file.secure_url}">📋 نسخ الرابط</button>
+                    <button class="btn btn-delete" data-public-id="${file.public_id}">🗑️ حذف</button>
+                </div>
+            `;
+            grid.appendChild(card);
+        }
+        document.querySelectorAll('.btn-download').forEach(btn => btn.addEventListener('click', () => window.open(btn.dataset.url, '_blank')));
+        document.querySelectorAll('.btn-copy').forEach(btn => btn.addEventListener('click', async () => { await navigator.clipboard.writeText(btn.dataset.url); alert('تم نسخ الرابط'); }));
+        document.querySelectorAll('.btn-delete').forEach(btn => btn.addEventListener('click', async () => { if(confirm('حذف الملف نهائياً؟')) { await fetch('/api/delete?public_id='+encodeURIComponent(btn.dataset.publicId), {method:'DELETE'}); loadFiles(); } }));
+    }
+    function escapeHtml(str) { return str.replace(/[&<>]/g, function(m){ if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+    const uploadArea = document.getElementById('uploadArea'), fileInput = document.getElementById('fileInput');
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', e => e.preventDefault());
+    uploadArea.addEventListener('drop', async e => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); if(files.length) await uploadFiles(files); });
+    fileInput.addEventListener('change', async e => { if(e.target.files.length) await uploadFiles(Array.from(e.target.files)); fileInput.value = ''; });
+    async function uploadFiles(files) {
+        for(const file of files) {
+            const formData = new FormData(); formData.append('file', file);
+            const res = await fetch('/api/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            alert(data.message || (res.ok ? '✅ تم الرفع' : '❌ فشل'));
+        }
+        loadFiles();
+    }
+    loadFiles();
+</script>
+</body>
+</html>
